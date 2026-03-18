@@ -390,65 +390,77 @@
            --- CSS ESPECIAL MODO VR 360 (META QUEST READY) ---
            ======================================================== */
         .vr-mode-active {
-            perspective: 1000px;
+            perspective: 800px;
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            background: #000;
             position: fixed;
             inset: 0;
             z-index: 999999;
-            animation: vr-enter 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             touch-action: none;
             cursor: grab;
+            background-color: #022c22; /* Fondo súper oscuro por si hay milisegundos de carga */
         }
         .vr-mode-active:active {
             cursor: grabbing;
         }
-        @keyframes vr-enter {
-            0% { opacity: 0; transform: scale(3); filter: blur(20px); }
-            100% { opacity: 1; transform: scale(1); filter: blur(0); }
+        
+        /* CÁMARA VR */
+        .vr-camera {
+            width: 100%; height: 100%;
+            position: absolute;
+            top: 0; left: 0;
+            transform-style: preserve-3d;
+            transform: translateZ(800px); 
+            pointer-events: none;
         }
+        
+        /* MUNDO VR */
         .vr-world {
-            width: 100%;
-            height: 100%;
+            width: 100%; height: 100%;
             position: absolute;
             top: 0; left: 0;
             transform-style: preserve-3d;
             will-change: transform;
+            pointer-events: none;
         }
+
+        /* PLANO DE JUEGO (UI) */
         .vr-ui-plane {
             position: absolute;
             left: 50%; top: 50%;
             width: 100vw; height: 100vh;
             margin-left: -50vw; margin-top: -50vh;
-            transform: translateZ(-600px) scale(0.625);
+            transform: translateZ(-800px) scale(1);
             display: flex; flex-direction: column;
             justify-content: center; align-items: center;
-            pointer-events: auto;
+            pointer-events: auto; /* IMPORTANTE: Permite que funcionen los botones en VR */
             transform-style: preserve-3d;
+            z-index: 100;
         }
         
-        /* El Skybox (Cubo envolvente panorámico) */
+        /* EL SKYBOX OPTIMIZADO PARA MEMORIA DE GPU DE QUEST: 
+           Reducido a 2048px (El límite real del hardware móvil) para evitar los flashes de textura. */
         .vr-skybox {
             position: absolute;
-            width: 2004px; height: 2004px;
+            width: 2048px; height: 2048px;
             left: 50%; top: 50%;
-            margin-left: -1002px; margin-top: -1002px;
+            margin-left: -1024px; margin-top: -1024px;
             background: linear-gradient(124deg, #059669, #10b981, #34d399, #14b8a6, #84cc16, #22c55e);
-            background-size: 400% 400%;
-            animation: eco-pan 18s ease infinite;
+            background-size: 200% 200%;
+            animation: eco-pan 20s ease infinite;
             border: none;
+            outline: 2px solid #059669; /* Sella las grietas del cubo para que no parpadeen luces blancas */
             backface-visibility: hidden;
-            transform-style: preserve-3d;
-            will-change: transform;
+            pointer-events: none;
         }
-        .vr-front  { transform: translateZ(-1000px); }
-        .vr-back   { transform: rotateY(180deg) translateZ(-1000px); }
-        .vr-left   { transform: rotateY(-90deg) translateZ(-1000px); }
-        .vr-right  { transform: rotateY(90deg) translateZ(-1000px); }
-        .vr-top    { transform: rotateX(90deg) translateZ(-1000px); }
-        .vr-bottom { transform: rotateX(-90deg) translateZ(-1000px); }
+        /* Ajuste de solapamiento de -4 píxeles (-1020px en lugar de -1024px) para cerrar microfisuras */
+        .vr-front  { transform: translateZ(-1020px); }
+        .vr-back   { transform: rotateY(180deg) translateZ(-1020px); }
+        .vr-left   { transform: rotateY(-90deg) translateZ(-1020px); }
+        .vr-right  { transform: rotateY(90deg) translateZ(-1020px); }
+        .vr-top    { transform: rotateX(90deg) translateZ(-1020px); }
+        .vr-bottom { transform: rotateX(-90deg) translateZ(-1020px); }
 
     </style>
 </head>
@@ -1003,14 +1015,35 @@
                 }, 1500);
             };
 
-            // --- LÓGICA VR 360 DRAG ---
+            // --- LÓGICA VR 360 DRAG & GIROS ---
             const enterVR = () => {
                 setIsVRMode(true);
                 setVrRotation({ x: 0, y: 0 });
                 playSound('select');
+                
+                // Fullscreen nativo para que el Quest / Mobile asuma inmersión total sin barra
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => console.log(err));
+                }
+                
+                // Solicitar permisos de giroscopio si el dispositivo lo requiere
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission().then(() => {}).catch(console.error);
+                }
+            };
+
+            const exitVR = () => {
+                setIsVRMode(false);
+                playSound('click');
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.log(err));
+                }
             };
 
             const handleDragStart = (e) => {
+                // Esta validación estricta permite dar prioridad a CUALQUIER elemento clickeable de UI
+                if (e.target.closest('button') || e.target.closest('input')) return;
                 setIsDragging(true);
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1025,7 +1058,7 @@
                 const dy = clientY - lastPos.y;
                 
                 setVrRotation(prev => ({
-                    x: Math.max(-90, Math.min(90, prev.x - dy * 0.3)), // Limite para no dar vueltas verticales completas
+                    x: Math.max(-90, Math.min(90, prev.x - dy * 0.3)),
                     y: prev.y + dx * 0.3
                 }));
                 
@@ -1035,6 +1068,46 @@
             const handleDragEnd = () => {
                 setIsDragging(false);
             };
+
+            // EFECTO DE HEAD TRACKING EN TIEMPO REAL (GIROSCOPIO DEL LENTE VR/TELÉFONO)
+            useEffect(() => {
+                if (!isVRMode) return;
+
+                let lastAlpha = null;
+                let lastBeta = null;
+
+                const handleOrientation = (event) => {
+                    if (event.alpha === null || event.beta === null) return;
+                    
+                    if (lastAlpha === null) {
+                        lastAlpha = event.alpha;
+                        lastBeta = event.beta;
+                        return;
+                    }
+
+                    let deltaAlpha = event.alpha - lastAlpha;
+                    let deltaBeta = event.beta - lastBeta;
+
+                    // Ajustar el giro para que no haya saltos locos en la cámara (giro fluido)
+                    if (deltaAlpha > 180) deltaAlpha -= 360;
+                    if (deltaAlpha < -180) deltaAlpha += 360;
+
+                    // El sensor de giroscopio actualiza la cámara *solo si no estás usando los mandos para arrastrar*
+                    if (!isDragging) {
+                        setVrRotation(prev => ({
+                            x: Math.max(-90, Math.min(90, prev.x + deltaBeta)), // Arriba / Abajo real
+                            y: prev.y - deltaAlpha // Izquierda / Derecha real
+                        }));
+                    }
+
+                    lastAlpha = event.alpha;
+                    lastBeta = event.beta;
+                };
+
+                window.addEventListener('deviceorientation', handleOrientation);
+                return () => window.removeEventListener('deviceorientation', handleOrientation);
+            }, [isVRMode, isDragging]);
+
 
             // VISTAS PRINCIPALES DEL JUEGO
             const renderView = () => {
@@ -1295,27 +1368,31 @@
                              onMouseDown={handleDragStart} onMouseMove={handleDragMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}
                              onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}>
                              
-                             <div className="vr-world" style={{ transform: `translateZ(1000px) rotateX(${vrRotation.x}deg) rotateY(${vrRotation.y}deg)` }}>
-                                 {/* Skybox */}
-                                 <div className="vr-skybox vr-front"></div>
-                                 <div className="vr-skybox vr-back"></div>
-                                 <div className="vr-skybox vr-left"></div>
-                                 <div className="vr-skybox vr-right"></div>
-                                 <div className="vr-skybox vr-top"></div>
-                                 <div className="vr-skybox vr-bottom"></div>
+                             {/* La "Cámara" se posiciona en el centro matemático exacto del mundo */}
+                             <div className="vr-camera">
+                                 {/* El "Mundo" es el que gira alrededor del usuario */}
+                                 <div className="vr-world" style={{ transform: `rotateX(${vrRotation.x}deg) rotateY(${vrRotation.y}deg)` }}>
+                                     {/* Skybox (Paredes gigantes 360 completamente inmersivas sin cortes) */}
+                                     <div className="vr-skybox vr-front"></div>
+                                     <div className="vr-skybox vr-back"></div>
+                                     <div className="vr-skybox vr-left"></div>
+                                     <div className="vr-skybox vr-right"></div>
+                                     <div className="vr-skybox vr-top"></div>
+                                     <div className="vr-skybox vr-bottom"></div>
 
-                                 {/* Pantalla Flotante UI */}
-                                 <div className="vr-ui-plane">
-                                     <RealisticLeaves />
-                                     <div className={`relative w-full flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 text-center ${shake ? 'anim-shake-hard' : ''}`}>
-                                         {renderView()}
+                                     {/* Pantalla Flotante UI Frontal */}
+                                     <div className="vr-ui-plane">
+                                         <RealisticLeaves />
+                                         <div className={`relative w-full flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 text-center ${shake ? 'anim-shake-hard' : ''}`}>
+                                             {renderView()}
+                                         </div>
                                      </div>
                                  </div>
                              </div>
 
                              {/* Botón Flotante para Salir de VR */}
                              <div className="fixed top-4 left-4 z-[9999999]">
-                                 <button onClick={() => { setIsVRMode(false); playSound('click'); }} 
+                                 <button onClick={exitVR} 
                                          className="btn-eco-main px-4 py-3 sm:px-6 sm:py-4 text-xs sm:text-sm font-black flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.5)] bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 border-2 border-red-300">
                                      <Icons.XCircle size={20} /> SALIR DE VR
                                  </button>
