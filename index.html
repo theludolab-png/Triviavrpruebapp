@@ -953,12 +953,25 @@
                 }, 1500);
             };
 
-            // --- LÓGICA DE WEBXR (Entrar a Meta Quest 360 Inmersivo) ---
-            const enterVR = () => {
+            // --- LÓGICA DE WEBXR (Meta Quest 360 Inmersivo NATIVO) ---
+            const enterVR = async () => {
                 playSound('select');
                 const scene = document.querySelector('a-scene');
-                if (scene) {
-                    // Llama nativamente a la API de WebXR del Meta Quest
+                if (scene && navigator.xr) {
+                    try {
+                        // FORZAMOS A MET AQUST A USAR AR CON LA INTERFAZ DOM.
+                        // La esfera verde gigante de abajo se encargará de tapar tu habitación para que se sienta como VR pura.
+                        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                        if (supported) {
+                            scene.systems.webxr.sessionConfiguration.mode = 'immersive-ar';
+                        } else {
+                            scene.systems.webxr.sessionConfiguration.mode = 'immersive-vr';
+                        }
+                        scene.enterVR();
+                    } catch (e) {
+                        scene.enterVR(); // Fallback
+                    }
+                } else if (scene) {
                     scene.enterVR();
                 }
             };
@@ -1228,7 +1241,7 @@
                         {showConfetti && <Confetti amount={gameState === 'result' ? 200 : 50} />}
 
                         {/* FONDOS PARA EL NAVEGADOR NORMAL 2D 
-                            (Se ocultan en modo VR para que la interfaz quede transparente y puedas ver el fondo verde 360) */}
+                            (Se ocultan en modo VR para que la interfaz quede transparente y puedas ver la esfera verde 360) */}
                         {!isVRMode && (
                             <>
                                 <div className="bg-eco-bright"></div>
@@ -1273,17 +1286,24 @@
                     </div>
 
                     {/* --- ENTORNO WEBXR NATIVO (Meta Quest) ---
-                        Esto está invisible en el navegador 2D, pero cuando oprimes "Modo VR", 
-                        el visor Meta Quest renderizará esta esfera de color a tu alrededor (fondo verde 360) 
-                        y montará la interfaz "#vr-ui-overlay" en frente de ti. */}
-                    <a-scene 
-                        embedded 
-                        vr-mode-ui="enabled: false"
-                        webxr="optionalFeatures: dom-overlay; overlayElement: #vr-ui-overlay"
-                        style={{ position: 'fixed', inset: 0, zIndex: -20, pointerEvents: 'none', display: isVRMode ? 'block' : 'none' }}
-                    >
-                        <a-sky color="#059669"></a-sky>
-                    </a-scene>
+                        El zIndex: -20 es crucial para que en PC el A-frame se quede atrás.
+                        La esfera gigante no se oculta y garantiza el 360 inmersivo. */}
+                    <div style={{ position: 'fixed', inset: 0, zIndex: -20 }}>
+                        <a-scene 
+                            embedded 
+                            vr-mode-ui="enabled: false"
+                            webxr="optionalFeatures: dom-overlay; overlayElement: #vr-ui-overlay"
+                        >
+                            {/* Esfera verde gigante que actúa como cielo y cubre en 360 grados */}
+                            <a-entity geometry="primitive: sphere; radius: 500" material="color: #059669; shader: flat; side: back"></a-entity>
+                            
+                            {/* Manos y Controles Visibles para Meta Quest */}
+                            <a-entity oculus-touch-controls="hand: left"></a-entity>
+                            <a-entity oculus-touch-controls="hand: right"></a-entity>
+                            <a-entity hand-tracking-controls="hand: left"></a-entity>
+                            <a-entity hand-tracking-controls="hand: right"></a-entity>
+                        </a-scene>
+                    </div>
                 </>
             );
         }
