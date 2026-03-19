@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Trivia Pro: Medio Ambiente Edition</title>
     
+    <!-- A-Frame (Motor WebXR nativo para Meta Quest 360) -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -184,11 +187,8 @@
         .btn-option-ludic:active { top: 4px; box-shadow: 0 0 0 transparent !important; transform: translateY(0); }
 
         /* COLORES EXACTOS SOLICITADOS PARA RESPUESTAS: */
-        /* 1. Verde Bajito */
         .btn-option-ludic.opt-0 { background-color: #dcfce7; border-color: #86efac; color: #14532d; box-shadow: 0 4px 0 #bbf7d0; } 
-        /* 2. Verde Oscuro */
         .btn-option-ludic.opt-1 { background-color: #14532d; border-color: #064e3b; color: #ffffff; box-shadow: 0 4px 0 #022c22; } 
-        /* 3. Verde Medio */
         .btn-option-ludic.opt-2 { background-color: #22c55e; border-color: #16a34a; color: #ffffff; box-shadow: 0 4px 0 #15803d; } 
         
         /* --- EFECTO ÉPICO PARA RESPUESTA CORRECTA --- */
@@ -385,83 +385,6 @@
             background: white; border-color: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.2);
         }
         .glass-input::placeholder { color: #94a3b8; font-weight: 500; }
-
-        /* ========================================================
-           --- CSS ESPECIAL MODO VR 360 (META QUEST READY) ---
-           ======================================================== */
-        .vr-mode-active {
-            perspective: 800px;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            position: fixed;
-            inset: 0;
-            z-index: 999999;
-            touch-action: none;
-            cursor: grab;
-            background-color: #022c22; /* Fondo súper oscuro por si hay milisegundos de carga */
-        }
-        .vr-mode-active:active {
-            cursor: grabbing;
-        }
-        
-        /* CÁMARA VR */
-        .vr-camera {
-            width: 100%; height: 100%;
-            position: absolute;
-            top: 0; left: 0;
-            transform-style: preserve-3d;
-            transform: translateZ(800px); 
-            pointer-events: none;
-        }
-        
-        /* MUNDO VR */
-        .vr-world {
-            width: 100%; height: 100%;
-            position: absolute;
-            top: 0; left: 0;
-            transform-style: preserve-3d;
-            will-change: transform;
-            pointer-events: none;
-        }
-
-        /* PLANO DE JUEGO (UI) */
-        .vr-ui-plane {
-            position: absolute;
-            left: 50%; top: 50%;
-            width: 100vw; height: 100vh;
-            margin-left: -50vw; margin-top: -50vh;
-            transform: translateZ(-800px) scale(1);
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            pointer-events: auto; /* IMPORTANTE: Permite que funcionen los botones en VR */
-            transform-style: preserve-3d;
-            z-index: 100;
-        }
-        
-        /* EL SKYBOX OPTIMIZADO PARA MEMORIA DE GPU DE QUEST: 
-           Reducido a 2048px (El límite real del hardware móvil) para evitar los flashes de textura. */
-        .vr-skybox {
-            position: absolute;
-            width: 2048px; height: 2048px;
-            left: 50%; top: 50%;
-            margin-left: -1024px; margin-top: -1024px;
-            background: linear-gradient(124deg, #059669, #10b981, #34d399, #14b8a6, #84cc16, #22c55e);
-            background-size: 200% 200%;
-            animation: eco-pan 20s ease infinite;
-            border: none;
-            outline: 2px solid #059669; /* Sella las grietas del cubo para que no parpadeen luces blancas */
-            backface-visibility: hidden;
-            pointer-events: none;
-        }
-        /* Ajuste de solapamiento de -4 píxeles (-1020px en lugar de -1024px) para cerrar microfisuras */
-        .vr-front  { transform: translateZ(-1020px); }
-        .vr-back   { transform: rotateY(180deg) translateZ(-1020px); }
-        .vr-left   { transform: rotateY(-90deg) translateZ(-1020px); }
-        .vr-right  { transform: rotateY(90deg) translateZ(-1020px); }
-        .vr-top    { transform: rotateX(90deg) translateZ(-1020px); }
-        .vr-bottom { transform: rotateX(-90deg) translateZ(-1020px); }
-
     </style>
 </head>
 <body>
@@ -730,11 +653,8 @@
             const [countdown, setCountdown] = useState(3);
             const [selectedOption, setSelectedOption] = useState(null);
             
-            // --- ESTADOS DE VR ---
+            // --- ESTADO DE VR (META QUEST WEBXR) ---
             const [isVRMode, setIsVRMode] = useState(false);
-            const [vrRotation, setVrRotation] = useState({ x: 0, y: 0 });
-            const [isDragging, setIsDragging] = useState(false);
-            const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
 
             // Estado para el Registro
             const [isRegistered, setIsRegistered] = useState(false);
@@ -752,6 +672,24 @@
 
             const [gameQuestions, setGameQuestions] = useState([]);
             const advanceTurnRef = useRef();
+
+            // Sincronizar eventos de entrada y salida nativos del Meta Quest
+            useEffect(() => {
+                const scene = document.querySelector('a-scene');
+                const onEnterVR = () => setIsVRMode(true);
+                const onExitVR = () => setIsVRMode(false);
+                
+                if (scene) {
+                    scene.addEventListener('enter-vr', onEnterVR);
+                    scene.addEventListener('exit-vr', onExitVR);
+                }
+                return () => {
+                    if (scene) {
+                        scene.removeEventListener('enter-vr', onEnterVR);
+                        scene.removeEventListener('exit-vr', onExitVR);
+                    }
+                };
+            }, []);
 
             useEffect(() => {
                 const audios = document.querySelectorAll('.game-audio');
@@ -1015,99 +953,23 @@
                 }, 1500);
             };
 
-            // --- LÓGICA VR 360 DRAG & GIROS ---
+            // --- LÓGICA DE WEBXR (Entrar a Meta Quest 360 Inmersivo) ---
             const enterVR = () => {
-                setIsVRMode(true);
-                setVrRotation({ x: 0, y: 0 });
                 playSound('select');
-                
-                // Fullscreen nativo para que el Quest / Mobile asuma inmersión total sin barra
-                const elem = document.documentElement;
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(err => console.log(err));
-                }
-                
-                // Solicitar permisos de giroscopio si el dispositivo lo requiere
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission().then(() => {}).catch(console.error);
+                const scene = document.querySelector('a-scene');
+                if (scene) {
+                    // Llama nativamente a la API de WebXR del Meta Quest
+                    scene.enterVR();
                 }
             };
 
             const exitVR = () => {
-                setIsVRMode(false);
                 playSound('click');
-                if (document.exitFullscreen) {
-                    document.exitFullscreen().catch(err => console.log(err));
+                const scene = document.querySelector('a-scene');
+                if (scene) {
+                    scene.exitVR();
                 }
             };
-
-            const handleDragStart = (e) => {
-                // Esta validación estricta permite dar prioridad a CUALQUIER elemento clickeable de UI
-                if (e.target.closest('button') || e.target.closest('input')) return;
-                setIsDragging(true);
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                setLastPos({ x: clientX, y: clientY });
-            };
-
-            const handleDragMove = (e) => {
-                if (!isDragging) return;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                const dx = clientX - lastPos.x;
-                const dy = clientY - lastPos.y;
-                
-                setVrRotation(prev => ({
-                    x: Math.max(-90, Math.min(90, prev.x - dy * 0.3)),
-                    y: prev.y + dx * 0.3
-                }));
-                
-                setLastPos({ x: clientX, y: clientY });
-            };
-
-            const handleDragEnd = () => {
-                setIsDragging(false);
-            };
-
-            // EFECTO DE HEAD TRACKING EN TIEMPO REAL (GIROSCOPIO DEL LENTE VR/TELÉFONO)
-            useEffect(() => {
-                if (!isVRMode) return;
-
-                let lastAlpha = null;
-                let lastBeta = null;
-
-                const handleOrientation = (event) => {
-                    if (event.alpha === null || event.beta === null) return;
-                    
-                    if (lastAlpha === null) {
-                        lastAlpha = event.alpha;
-                        lastBeta = event.beta;
-                        return;
-                    }
-
-                    let deltaAlpha = event.alpha - lastAlpha;
-                    let deltaBeta = event.beta - lastBeta;
-
-                    // Ajustar el giro para que no haya saltos locos en la cámara (giro fluido)
-                    if (deltaAlpha > 180) deltaAlpha -= 360;
-                    if (deltaAlpha < -180) deltaAlpha += 360;
-
-                    // El sensor de giroscopio actualiza la cámara *solo si no estás usando los mandos para arrastrar*
-                    if (!isDragging) {
-                        setVrRotation(prev => ({
-                            x: Math.max(-90, Math.min(90, prev.x + deltaBeta)), // Arriba / Abajo real
-                            y: prev.y - deltaAlpha // Izquierda / Derecha real
-                        }));
-                    }
-
-                    lastAlpha = event.alpha;
-                    lastBeta = event.beta;
-                };
-
-                window.addEventListener('deviceorientation', handleOrientation);
-                return () => window.removeEventListener('deviceorientation', handleOrientation);
-            }, [isVRMode, isDragging]);
-
 
             // VISTAS PRINCIPALES DEL JUEGO
             const renderView = () => {
@@ -1198,6 +1060,7 @@
                                     className="btn-eco-main text-xl sm:text-2xl md:text-3xl px-10 py-4 sm:px-16 sm:py-6 rounded-full flex items-center gap-3 sm:gap-4 hover:shadow-2xl hover:scale-110 transition-transform hover-shine-effect">
                                     <Icons.Play size={32} className="w-6 h-6 sm:w-8 sm:h-8" /> JUGAR AHORA
                                 </button>
+                                {/* Botón para entrar a WebXR Inmersivo en Meta Quest */}
                                 <button onClick={enterVR} 
                                     className="btn-option-ludic opt-1 bg-gradient-to-r from-emerald-800 to-green-900 text-white text-lg sm:text-xl md:text-2xl px-6 py-4 sm:px-8 sm:py-5 rounded-full flex items-center gap-2 sm:gap-3 hover:scale-110 transition-transform hover-shine-effect border-2 border-green-500 shadow-xl" title="Explora en 360 grados">
                                     <Icons.VR size={28} className="w-6 h-6 sm:w-8 sm:h-8 animate-pulse text-green-300" /> MODO VR
@@ -1344,92 +1207,84 @@
             };
 
             return (
-                <div className="min-h-screen relative overflow-hidden font-sans text-slate-800" onClick={startMusic}>
-                    {/* AUDIOS NATIVOS */}
-                    <audio id="sfx-bgMusic" className="game-audio" src={AUDIO_URLS.bgMusic} preload="auto" loop></audio>
-                    <audio id="sfx-correct" className="game-audio" src={AUDIO_URLS.correct} preload="auto"></audio>
-                    <audio id="sfx-wrong" className="game-audio" src={AUDIO_URLS.wrong} preload="auto"></audio>
-                    <audio id="sfx-timeUp" className="game-audio" src={AUDIO_URLS.timeUp} preload="auto"></audio>
-                    <audio id="sfx-click" className="game-audio" src={AUDIO_URLS.click} preload="auto"></audio>
-                    <audio id="sfx-select" className="game-audio" src={AUDIO_URLS.select} preload="auto"></audio>
-                    <audio id="sfx-win" className="game-audio" src={AUDIO_URLS.win} preload="auto"></audio>
-                    <audio id="sfx-countdown" className="game-audio" src={AUDIO_URLS.countdown} preload="auto"></audio>
-                    <audio id="sfx-playBtn" className="game-audio" src={AUDIO_URLS.playBtn} preload="auto"></audio>
+                <>
+                    {/* DOM OVERLAY CONTAINER: Todo lo que esté aquí dentro flotará frente a ti en VR */}
+                    <div id="vr-ui-overlay" className="min-h-screen relative overflow-hidden font-sans text-slate-800" onClick={startMusic}>
+                        {/* AUDIOS NATIVOS */}
+                        <audio id="sfx-bgMusic" className="game-audio" src={AUDIO_URLS.bgMusic} preload="auto" loop></audio>
+                        <audio id="sfx-correct" className="game-audio" src={AUDIO_URLS.correct} preload="auto"></audio>
+                        <audio id="sfx-wrong" className="game-audio" src={AUDIO_URLS.wrong} preload="auto"></audio>
+                        <audio id="sfx-timeUp" className="game-audio" src={AUDIO_URLS.timeUp} preload="auto"></audio>
+                        <audio id="sfx-click" className="game-audio" src={AUDIO_URLS.click} preload="auto"></audio>
+                        <audio id="sfx-select" className="game-audio" src={AUDIO_URLS.select} preload="auto"></audio>
+                        <audio id="sfx-win" className="game-audio" src={AUDIO_URLS.win} preload="auto"></audio>
+                        <audio id="sfx-countdown" className="game-audio" src={AUDIO_URLS.countdown} preload="auto"></audio>
+                        <audio id="sfx-playBtn" className="game-audio" src={AUDIO_URLS.playBtn} preload="auto"></audio>
 
-                    {/* EFECTOS ESPECIALES OVERLAY SIEMPRE POR ENCIMA DE TODO */}
-                    {wrongFlash && gameState === 'playing' && <div className="wrong-screen-flash"></div>}
-                    {showConfetti && gameState === 'playing' && <div className="correct-screen-flash"></div>}
-                    {timeUpAnim && gameState === 'playing' && <div className="time-up-overlay"></div>}
-                    {showConfetti && <Confetti amount={gameState === 'result' ? 200 : 50} />}
+                        {/* EFECTOS ESPECIALES OVERLAY SIEMPRE POR ENCIMA DE TODO */}
+                        {wrongFlash && gameState === 'playing' && <div className="wrong-screen-flash"></div>}
+                        {showConfetti && gameState === 'playing' && <div className="correct-screen-flash"></div>}
+                        {timeUpAnim && gameState === 'playing' && <div className="time-up-overlay"></div>}
+                        {showConfetti && <Confetti amount={gameState === 'result' ? 200 : 50} />}
 
-                    {isVRMode ? (
-                        /* --- CONTENEDOR MODO VR 360 --- */
-                        <div className="vr-mode-active"
-                             onMouseDown={handleDragStart} onMouseMove={handleDragMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}
-                             onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}>
-                             
-                             {/* La "Cámara" se posiciona en el centro matemático exacto del mundo */}
-                             <div className="vr-camera">
-                                 {/* El "Mundo" es el que gira alrededor del usuario */}
-                                 <div className="vr-world" style={{ transform: `rotateX(${vrRotation.x}deg) rotateY(${vrRotation.y}deg)` }}>
-                                     {/* Skybox (Paredes gigantes 360 completamente inmersivas sin cortes) */}
-                                     <div className="vr-skybox vr-front"></div>
-                                     <div className="vr-skybox vr-back"></div>
-                                     <div className="vr-skybox vr-left"></div>
-                                     <div className="vr-skybox vr-right"></div>
-                                     <div className="vr-skybox vr-top"></div>
-                                     <div className="vr-skybox vr-bottom"></div>
-
-                                     {/* Pantalla Flotante UI Frontal */}
-                                     <div className="vr-ui-plane">
-                                         <RealisticLeaves />
-                                         <div className={`relative w-full flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 text-center ${shake ? 'anim-shake-hard' : ''}`}>
-                                             {renderView()}
-                                         </div>
-                                     </div>
-                                 </div>
-                             </div>
-
-                             {/* Botón Flotante para Salir de VR */}
-                             <div className="fixed top-4 left-4 z-[9999999]">
-                                 <button onClick={exitVR} 
-                                         className="btn-eco-main px-4 py-3 sm:px-6 sm:py-4 text-xs sm:text-sm font-black flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.5)] bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 border-2 border-red-300">
-                                     <Icons.XCircle size={20} /> SALIR DE VR
-                                 </button>
-                             </div>
-                        </div>
-                    ) : (
-                        /* --- CONTENEDOR MODO NORMAL 2D --- */
-                        <>
-                            <div className="bg-eco-bright"></div>
-                            <div className="screen-shine-sweep"></div>
-                            <RealisticLeaves />
-                            
-                            {!isLoading && gameState !== 'selection_popup' && gameState !== 'countdown' && (
-                                <div className="fixed top-2 right-2 sm:top-4 sm:right-4 md:top-6 md:right-6 z-[99999] flex gap-2 sm:gap-3 pointer-events-auto scale-90 sm:scale-100 transform origin-top-right">
-                                    <button onClick={toggleMute} className={`btn-control-fixed ${isMuted ? 'bg-red-50 text-red-500 border-red-300' : 'hover:bg-green-50 text-slate-500 hover:border-green-400'}`} title={isMuted ? "Activar Sonido" : "Silenciar"}>
-                                        {isMuted ? <Icons.VolumeX size={24} /> : <Icons.Volume2 size={24} />}
+                        {/* FONDOS PARA EL NAVEGADOR NORMAL 2D 
+                            (Se ocultan en modo VR para que la interfaz quede transparente y puedas ver el fondo verde 360) */}
+                        {!isVRMode && (
+                            <>
+                                <div className="bg-eco-bright"></div>
+                                <div className="screen-shine-sweep"></div>
+                            </>
+                        )}
+                        <RealisticLeaves />
+                        
+                        {/* CONTROLES FIJOS (Silenciar y Volver) */}
+                        {!isLoading && gameState !== 'selection_popup' && gameState !== 'countdown' && !isVRMode && (
+                            <div className="fixed top-2 right-2 sm:top-4 sm:right-4 md:top-6 md:right-6 z-[99999] flex gap-2 sm:gap-3 pointer-events-auto scale-90 sm:scale-100 transform origin-top-right">
+                                <button onClick={toggleMute} className={`btn-control-fixed ${isMuted ? 'bg-red-50 text-red-500 border-red-300' : 'hover:bg-green-50 text-slate-500 hover:border-green-400'}`} title={isMuted ? "Activar Sonido" : "Silenciar"}>
+                                    {isMuted ? <Icons.VolumeX size={24} /> : <Icons.Volume2 size={24} />}
+                                </button>
+                                {isRegistered && (
+                                    <button onClick={() => { playSound('click'); goToMenu(); }} className="btn-control-fixed hover:bg-green-50 hover:border-green-400 hover:text-green-500" title="Menú">
+                                        <Icons.Home size={24} />
                                     </button>
-                                    {isRegistered && (
-                                        <button onClick={() => { playSound('click'); goToMenu(); }} className="btn-control-fixed hover:bg-green-50 hover:border-green-400 hover:text-green-500" title="Menú">
-                                            <Icons.Home size={24} />
-                                        </button>
-                                    )}
-                                    {(gameState === 'playing' || gameState === 'result') && (
-                                        <button onClick={() => { playSound('click'); startGame(numPlayers); }} className="btn-control-fixed hover:bg-green-50 hover:border-green-400 text-green-600" title="Reiniciar">
-                                            <Icons.Refresh size={24} />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className={`relative w-full min-h-screen min-h-[100dvh] flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 text-center ${shake ? 'anim-shake-hard' : ''}`}>
-                                {renderView()}
+                                )}
+                                {(gameState === 'playing' || gameState === 'result') && (
+                                    <button onClick={() => { playSound('click'); startGame(numPlayers); }} className="btn-control-fixed hover:bg-green-50 hover:border-green-400 text-green-600" title="Reiniciar">
+                                        <Icons.Refresh size={24} />
+                                    </button>
+                                )}
                             </div>
-                        </>
-                    )}
+                        )}
 
-                </div>
+                        {/* Botón de Salida VR inmersiva */}
+                        {isVRMode && (
+                            <div className="fixed top-4 left-4 z-[9999999]">
+                                <button onClick={exitVR} 
+                                        className="btn-eco-main px-4 py-3 sm:px-6 sm:py-4 text-xs sm:text-sm font-black flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.5)] bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 border-2 border-red-300">
+                                    <Icons.XCircle size={20} /> SALIR DE VR
+                                </button>
+                            </div>
+                        )}
+
+                        {/* VISTA DEL JUEGO */}
+                        <div className={`relative w-full min-h-screen min-h-[100dvh] flex flex-col items-center justify-center p-2 sm:p-4 md:p-6 text-center ${shake ? 'anim-shake-hard' : ''}`}>
+                            {renderView()}
+                        </div>
+                    </div>
+
+                    {/* --- ENTORNO WEBXR NATIVO (Meta Quest) ---
+                        Esto está invisible en el navegador 2D, pero cuando oprimes "Modo VR", 
+                        el visor Meta Quest renderizará esta esfera de color a tu alrededor (fondo verde 360) 
+                        y montará la interfaz "#vr-ui-overlay" en frente de ti. */}
+                    <a-scene 
+                        embedded 
+                        vr-mode-ui="enabled: false"
+                        webxr="optionalFeatures: dom-overlay; overlayElement: #vr-ui-overlay"
+                        style={{ position: 'fixed', inset: 0, zIndex: -20, pointerEvents: 'none', display: isVRMode ? 'block' : 'none' }}
+                    >
+                        <a-sky color="#059669"></a-sky>
+                    </a-scene>
+                </>
             );
         }
 
